@@ -7,19 +7,19 @@ import os
 class LicensePlateProcessing:
     def __init__(self):
         # image max size
-        self.target_width: int = 1280
+        self.target_width: int = 960
 
         # image processing
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 5))
-        self.gaussian_blur: tuple[int, int] = (9, 7)
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        self.gaussian_blur: tuple[int, int] = (7, 5)
 
         # img filtering
-        self.filter_di: int = 30
+        self.filter_di: int = 15
         self.filter_sig_color: int = 25
-        self.filter_sig_space: int = 10
+        self.filter_sig_space: int = 50
 
         # plate requirements
-        self.second_plate_ratio: float = 0.6
+        self.second_plate_ratio: float = 0.7
         self.min_plate_ratio: float = 2
         self.max_plate_ratio: float = 6
         self.approx_poly_dp: float = 0.015
@@ -33,16 +33,18 @@ class LicensePlateProcessing:
         gray_img = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
         filtered_img = self.img_filtering(gray_img)
         img_contours = self.find_contours(filtered_img)
-        plate_contour = self.find_plate_contour(img_contours)
+        plate_contour = self.find_plate_approx(img_contours)
+        if plate_contour is None:
+            return ""
         plate_img = self.cut_plate_img(scaled_img, plate_contour)
-        # img_with_contours = cv2.drawContours(
-        #     scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
-        # )
-        # img_with_plate_contours = cv2.drawContours(
-        #     img_with_contours, plate_contour, -1, (0, 255, 0), 3
-        # )
-        img_plate = cv2.drawContours(plate_img, plate_contour, -1, (0, 255, 0), 3)
-        cv2.imshow("Processed Image", img_plate)
+        img_with_contours = cv2.drawContours(
+            scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
+        )
+        img_with_plate_contours = cv2.drawContours(
+            img_with_contours, plate_contour, -1, (0, 255, 0), 3
+        )
+        # img_plate = cv2.drawContours(plate_img, plate_contour, -1, (0, 255, 0), 3)
+        cv2.imshow("Processed Image", img_with_plate_contours)
         cv2.waitKey(0)
         return ""
 
@@ -70,19 +72,20 @@ class LicensePlateProcessing:
         edges = cv2.adaptiveThreshold(
             img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 3
         )
-        # edges = cv2.Canny(img, 80, 180)
         edges = self.edit_edges(edges)
         return edges
 
     def edit_edges(self, edges: np.ndarray) -> np.ndarray:
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, self.kernel, iterations=1)
         edges = cv2.dilate(edges, self.kernel, iterations=1)
         edges = cv2.erode(edges, self.kernel, iterations=1)
+        print(edges)
         return edges
 
-    def find_plate_contour(self, contours: np.ndarray) -> list:
-        contours = self.filter_contours(contours)
-        plate_contour = self.choose_plate_from_contours(contours)
-        return plate_contour
+    def find_plate_approx(self, approxes: np.ndarray) -> list:
+        approxes = self.filter_contours(approxes)
+        plate_approx = self.choose_plate(approxes)
+        return plate_approx
 
     def approx_contour(self, contour: list[np.ndarray]) -> np.ndarray:
         return cv2.approxPolyDP(
@@ -90,19 +93,19 @@ class LicensePlateProcessing:
         )
 
     def filter_contours(self, contours: np.ndarray) -> list[np.ndarray]:
-        valid_approxes = []
+        approxes = []
         for contour in contours:
             approx = self.approx_contour(contour)
             if len(approx) == 4 and self.is_valid_ratio(approx):
-                valid_approxes.append(approx)
-        return valid_approxes
+                approxes.append(approx)
+        return approxes
 
     def is_valid_ratio(self, approx: np.ndarray) -> bool:
         side_lengths = [cv2.norm(approx[i % 4] - approx[(i + 1) % 4]) for i in range(4)]
         ratio = max(side_lengths) / min(side_lengths)
         return self.min_plate_ratio < ratio < self.max_plate_ratio
 
-    def choose_plate_from_contours(
+    def choose_plate(
         self, contours: list[np.ndarray]
     ) -> list[np.ndarray] | None:
         contours.sort(key=cv2.contourArea, reverse=True)
@@ -115,7 +118,7 @@ class LicensePlateProcessing:
             return [contours[0]]
         return None
 
-    def cut_plate_img(self, img: np.ndarray, approx: np.ndarray) -> np.ndarray:
+    def cut_plate_img(self, img: np.ndarray, approx: list) -> np.ndarray:
         new_polygon = np.array(self.sort_points_clockwise(approx[0]), dtype=np.float32)
         transformation_matrix = cv2.getPerspectiveTransform(
             new_polygon, self.get_target_rect()
