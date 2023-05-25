@@ -5,7 +5,7 @@ import numpy as np
 import string
 
 
-class CharsGenerator:
+class CharsImgGenerator:
     def __init__(self):
         # font setting
         self.char_height = 200
@@ -40,7 +40,8 @@ class CharsGenerator:
         cutted_img = self.crop_imges(img, max(contours, key=cv2.contourArea))
         return cutted_img
 
-    def filter_edges(self, edges):
+    @staticmethod
+    def filter_edges(edges):
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
         edges = cv2.dilate(edges, kernel, iterations=1)
@@ -53,6 +54,7 @@ class CharsGenerator:
             chars.append(self.crop_imges(img, contour))
         return chars
 
-    def crop_imges(self, img, contour):
+    @staticmethod
+    def crop_imges(img, contour):
         (x, y, w, h) = cv2.boundingRect(contour)
         return img[y: y + h, x: x + w]
