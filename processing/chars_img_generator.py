@@ -33,7 +33,7 @@ class CharsImgGenerator:
         _, img = cv2.threshold(img, 128, 255, cv2.THRESH_BINARY)
         return img
 
-    def extract_char(self, img: np.ndarray):
+    def extract_char(self, img: np.ndarray) -> np.ndarray:
         canny = cv2.Canny(img, 0, 255)
         canny = self.filter_edges(canny)
         contours, _ = cv2.findContours(canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -41,20 +41,20 @@ class CharsImgGenerator:
         return cutted_img
 
     @staticmethod
-    def filter_edges(edges):
+    def filter_edges(edges: np.ndarray) -> np.ndarray:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=1)
         edges = cv2.dilate(edges, kernel, iterations=1)
         edges = cv2.erode(edges, kernel, iterations=1)
         return edges
 
-    def crop_img(self, img, contours):
+    def crop_img(self, img: np.ndarray, contours: np.ndarray) -> list[np.ndarray]:
         chars = []
         for contour in contours:
             chars.append(self.crop_imges(img, contour))
         return chars
 
     @staticmethod
-    def crop_imges(img, contour):
+    def crop_imges(img: np.ndarray, contour: np.ndarray) -> np.ndarray:
         (x, y, w, h) = cv2.boundingRect(contour)
         return img[y: y + h, x: x + w]
