@@ -1,72 +1,102 @@
 import cv2
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+import os
 
 
 class LicensePlateProcessing:
     def __init__(self):
-        self.max_w = 1280
-        self.max_h = 720
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        self.canny_threshold1 = 40
-        self.canny_threshold2 = 60
-        self.blur_size = 5
-        self.filter_di = 16
-        self.filter_sig_color = 60
-        self.filter_sig_space = 200
-        self.min_plate_ratio = 2.0
-        self.max_plate_ratio = 6.0
-        self.all_contours_color = (0, 255, 0)
-        self.plate_contours_color = (0, 0, 255)
-        self.min_plate_width = 1/3
-        self.min_plate_height = 1/8
+        # image max size
+        self.target_width: int = 1280
 
-    def fit_to_screen(self, img):
-        if img.shape[0] > self.max_h or img.shape[1] > self.max_w:
-            ratio = min(self.max_w / img.shape[1], self.max_h / img.shape[0])
-            new_w = int(img.shape[1] * ratio)
-            new_h = int(img.shape[0] * ratio)
-            img = cv2.resize(img, (new_w, new_h))
+        # image processing
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 5))
+        self.gaussian_blur: tuple[int, int] = (9, 7)
+
+        # img filtering
+        self.filter_di: int = 30
+        self.filter_sig_color: int = 25
+        self.filter_sig_space: int = 10
+
+        # plate setting
+        self.second_plate_ratio: float = 0.6
+        self.min_plate_ratio: float = 2
+        self.max_plate_ratio: float = 6
+        self.approx_poly_dp: float = 0.015
+
+    def resize_img(self, img: np.ndarray) -> np.ndarray:
+        if img.shape[1] != self.target_width:
+            ratio = self.target_width / img.shape[1]
+            new_width = self.target_width
+            new_height = int(img.shape[0] * ratio)
+            img = cv2.resize(img, (new_width, new_height))
         return img
 
-    def image_filtering(self, img):
-        blurred_img = cv2.GaussianBlur(img, (self.blur_size, self.blur_size), 0)
-        filtered_img = cv2.bilateralFilter(blurred_img, self.filter_di, self.filter_sig_color, self.filter_sig_space)
-        return filtered_img
+    def img_filtering(self, img: np.ndarray) -> np.ndarray:
+        img = cv2.bilateralFilter(img, self.filter_di, self.filter_sig_color, self.filter_sig_space)
+        img = cv2.GaussianBlur(img, self.gaussian_blur, 0)
+        return img
 
-    def find_contours(self, img):
-        edges = cv2.Canny(img, self.canny_threshold1, self.canny_threshold2)
-        closing = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, self.kernel, iterations=1)
-        dilated = cv2.dilate(closing, self.kernel, iterations=1)
-        eroded = cv2.erode(dilated, self.kernel, iterations=1)
-        contours, _ = cv2.findContours(eroded, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    def find_contours(self, img: np.ndarray) -> np.ndarray:
+        edges = self.get_edges(img)
+        contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         return contours
 
-    def find_license_plate(self, contours, scaled_img):
-        valid_contours = []
+    def get_edges(self, img: np.ndarray) -> np.ndarray:
+        edges = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 3)
+        # edges = cv2.Canny(img, 80, 180)
+        edges = self.edit_edges(edges)
+        return edges
+
+    def edit_edges(self, edges: np.ndarray) -> np.ndarray:
+        edges = cv2.dilate(edges, self.kernel, iterations=1)
+        edges = cv2.erode(edges, self.kernel, iterations=1)
+        return edges
+
+    def find_plate_contour(self, contours: np.ndarray) -> list:
+        contours = self.filter_contours(contours)
+        plate_contour = self.choose_plate_from_contour(contours)
+        return plate_contour
+
+    def approx_contour(self, contour: list[np.ndarray]) -> np.ndarray:
+        return cv2.approxPolyDP(contour, self.approx_poly_dp * cv2.arcLength(contour, True), True)
+
+    def filter_contours(self, contours: np.ndarray) -> list[np.ndarray]:
+        valid_approxes = []
         for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            ratio = w / float(h)
-            if self.is_valid_plate_ratio(ratio, w, h, scaled_img):
-                valid_contours.append(contour)
-        if valid_contours:
-            max_contour = max(valid_contours, key=cv2.contourArea)
-            return [max_contour]
+            approx = self.approx_contour(contour)
+            if len(approx) == 4 and self.is_valid_ratio(approx):
+                valid_approxes.append(approx)
+        return valid_approxes
+
+    def is_valid_ratio(self, approx: np.ndarray) -> bool:
+        side_lengths = [
+            cv2.norm(approx[i % 4] - approx[(i + 1) % 4]) for i in range(4)
+        ]
+        ratio = max(side_lengths) / min(side_lengths)
+        return self.min_plate_ratio < ratio < self.max_plate_ratio
+
+    def choose_plate_from_contour(self, contours: list[np.ndarray]) -> list[np.ndarray]|None:
+        contours.sort(key=cv2.contourArea, reverse=True)
+        if contours:
+            if len(contours) >= 2:
+                if cv2.contourArea(contours[1]) > self.second_plate_ratio * cv2.contourArea(contours[0]):
+                    return [contours[1]]
+            return [contours[0]]
         return None
 
-    def is_valid_plate_ratio(self, ratio, w, h, scaled_img):
-        min_w = scaled_img.shape[1] * self.min_plate_width
-        min_h = scaled_img.shape[0] * self.min_plate_height
-        return self.min_plate_ratio <= ratio <= self.max_plate_ratio and w > min_w and h > min_h
-
     def perform_processing(self, img: np.ndarray) -> str:
-        print(f'image.shape: {img.shape}')
-        scaled_img = self.fit_to_screen(img)
+        scaled_img = self.resize_img(img)
         gray_img = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
-        filtered_img = self.image_filtering(gray_img)
-        contours = self.find_contours(filtered_img)
-        plate_contour = self.find_license_plate(contours, scaled_img)
-        img_with_contours = cv2.drawContours(scaled_img.copy(), contours, -1, self.all_contours_color, 2)
-        img_with_plate_contours = cv2.drawContours(scaled_img.copy(), plate_contour, -1, self.plate_contours_color, 3)
+        filtered_img = self.img_filtering(gray_img)
+        img_contours = self.find_contours(filtered_img)
+        plate_contour = self.find_plate_contour(img_contours)
+        img_with_contours = cv2.drawContours(
+            scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
+        )
+        img_with_plate_contours = cv2.drawContours(
+            img_with_contours, plate_contour, -1, (0, 255, 0), 3
+        )
         cv2.imshow("Processed Image", img_with_plate_contours)
         cv2.waitKey(0)
-        return 'PO12345'
+        return ""
