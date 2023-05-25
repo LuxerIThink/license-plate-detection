@@ -1,10 +1,10 @@
 import cv2
 import numpy as np
 
-from .chars_generator import CharsGenerator
+from .chars_img_generator import CharsImgGenerator
 
 
-class LicensePlateProcessing:
+class LicensePlateGatherer:
     def __init__(self):
         # image max size
         self.target_width: int = 960
@@ -28,7 +28,7 @@ class LicensePlateProcessing:
         self.plate_width: float = 1000
         self.plate_height: float = 200
 
-        self.chars_generator = CharsGenerator()
+        self.chars_generator = CharsImgGenerator()
         self.chars_generator.generate_chars_imgs()
 
     def perform_processing(self, img: np.ndarray) -> str:
@@ -130,7 +130,8 @@ class LicensePlateProcessing:
         )
         return transformed_image
 
-    def sort_points_clockwise(self, points: list) -> list:
+    @staticmethod
+    def sort_points_clockwise(points: list) -> list:
         sorted_by_y = sorted(points, key=lambda point: point[0][1])
         top_order = sorted(sorted_by_y[:2], key=lambda point: point[0][0])
         bottom_order = sorted(
