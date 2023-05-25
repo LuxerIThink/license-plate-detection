@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from .chars_img_generator import CharsImgGenerator
+from .chars_gatherer import CharsGatherer
 
 
 class LicensePlateGatherer:
@@ -9,17 +9,16 @@ class LicensePlateGatherer:
         # image max size
         self.target_width: int = 960
 
-        # image processing
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        self.gaussian_blur: tuple[int, int] = (7, 5)
-
         # img filtering
         self.filter_di: int = 15
         self.filter_sig_color: int = 25
         self.filter_sig_space: int = 50
+        self.gaussian_blur: tuple[int, int] = (7, 5)
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+
 
         # plate requirements
-        self.second_plate_ratio: float = 0.7
+        self.second_plate_ratio: float = 0.6
         self.min_plate_ratio: float = 2
         self.max_plate_ratio: float = 6
         self.approx_poly_dp: float = 0.015
@@ -28,28 +27,21 @@ class LicensePlateGatherer:
         self.plate_width: float = 1000
         self.plate_height: float = 200
 
-        self.chars_generator = CharsImgGenerator()
-        self.chars_generator.generate_chars_imgs()
+        self.chars_gatherer = CharsGatherer(self.plate_height)
 
     def perform_processing(self, img: np.ndarray) -> str:
         scaled_img = self.resize_img(img)
         gray_img = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
         filtered_img = self.img_filtering(gray_img)
         img_contours = self.find_contours(filtered_img)
+        if img_contours is None:
+            return ""
         plate_contour = self.find_plate_approx(img_contours)
         if plate_contour is None:
             return ""
         plate_img = self.cut_plate_img(scaled_img, plate_contour)
-        # img_with_contours = cv2.drawContours(
-        #     scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
-        # )
-        # img_with_plate_contours = cv2.drawContours(
-        #     img_with_contours, plate_contour, -1, (0, 255, 0), 3
-        # )
-        # img_plate = cv2.drawContours(plate_img, plate_contour, -1, (0, 255, 0), 3)
-        # cv2.imshow("Processed Image", img_with_plate_contours)
-        # cv2.waitKey(0)
-        return ""
+        string = self.chars_gatherer.get_str(plate_img)
+        return string
 
     def resize_img(self, img: np.ndarray) -> np.ndarray:
         if img.shape[1] != self.target_width:
@@ -72,9 +64,7 @@ class LicensePlateGatherer:
         return contours
 
     def get_edges(self, img: np.ndarray) -> np.ndarray:
-        edges = cv2.adaptiveThreshold(
-            img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 3
-        )
+        edges = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 9, 3)
         edges = self.edit_edges(edges)
         return edges
 
@@ -90,9 +80,7 @@ class LicensePlateGatherer:
         return plate_approx
 
     def approx_contour(self, contour: list[np.ndarray]) -> np.ndarray:
-        return cv2.approxPolyDP(
-            contour, self.approx_poly_dp * cv2.arcLength(contour, True), True
-        )
+        return cv2.approxPolyDP(contour, self.approx_poly_dp * cv2.arcLength(contour, True), True)
 
     def filter_contours(self, contours: np.ndarray) -> list[np.ndarray]:
         approxes = []
