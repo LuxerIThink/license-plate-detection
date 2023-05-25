@@ -2,7 +2,6 @@ import json
 import pytest
 from subprocess import check_output
 import time
-import os
 from pathlib import Path
 
 
@@ -52,12 +51,8 @@ def test_main(run_main):
     with open(output_file, "r") as f:
         actual_output = json.load(f)
 
-    # Compare the expected and actual outputs in a different order
-    expected_keys = set(expected_output.keys())
-    actual_keys = set(actual_output.keys())
-
     # Calculate percentage of correct characters in the values
-    percentage_correct = calculate_correct_chars(expected_output, actual_output)
+    percentage_correct = calculate_correct_chars(expected_output.keys(), actual_output.keys())
 
     print("\nElapsed Time:", elapsed_time, "seconds")
     print("Percentage of Correct Characters:", percentage_correct)
