@@ -4,7 +4,7 @@ from pathlib import Path
 
 import cv2
 
-from processing.utils import LicensePlateProcessing
+from processing.license_plate_gatherer import LicensePlateGatherer
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
         ]
     )
     results = {}
-    license_process = LicensePlateProcessing()
+    license_process = LicensePlateGatherer()
     for image_path in images_paths:
         image = cv2.imread(str(image_path))
         if image is None:
