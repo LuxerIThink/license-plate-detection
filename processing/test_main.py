@@ -39,7 +39,7 @@ def test_main(run_main):
 
     start_time = time.time()  # Start time measurement
 
-    # Run main.py with the arguments
+    # Run main with the arguments
     _ = run_main(main_path, img_path, output_file)
 
     end_time = time.time()  # End time measurement
