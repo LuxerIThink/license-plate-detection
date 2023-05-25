@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
-import os
+
+from .chars_generator import CharsGenerator
 
 
 class LicensePlateProcessing:
@@ -28,6 +28,9 @@ class LicensePlateProcessing:
         self.plate_width: float = 1000
         self.plate_height: float = 200
 
+        self.chars_generator = CharsGenerator()
+        self.chars_generator.generate_chars_imgs()
+
     def perform_processing(self, img: np.ndarray) -> str:
         scaled_img = self.resize_img(img)
         gray_img = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
@@ -37,15 +40,15 @@ class LicensePlateProcessing:
         if plate_contour is None:
             return ""
         plate_img = self.cut_plate_img(scaled_img, plate_contour)
-        img_with_contours = cv2.drawContours(
-            scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
-        )
-        img_with_plate_contours = cv2.drawContours(
-            img_with_contours, plate_contour, -1, (0, 255, 0), 3
-        )
+        # img_with_contours = cv2.drawContours(
+        #     scaled_img.copy(), img_contours, -1, (0, 0, 255), 3
+        # )
+        # img_with_plate_contours = cv2.drawContours(
+        #     img_with_contours, plate_contour, -1, (0, 255, 0), 3
+        # )
         # img_plate = cv2.drawContours(plate_img, plate_contour, -1, (0, 255, 0), 3)
-        cv2.imshow("Processed Image", img_with_plate_contours)
-        cv2.waitKey(0)
+        # cv2.imshow("Processed Image", img_with_plate_contours)
+        # cv2.waitKey(0)
         return ""
 
     def resize_img(self, img: np.ndarray) -> np.ndarray:
@@ -79,7 +82,6 @@ class LicensePlateProcessing:
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, self.kernel, iterations=1)
         edges = cv2.dilate(edges, self.kernel, iterations=1)
         edges = cv2.erode(edges, self.kernel, iterations=1)
-        print(edges)
         return edges
 
     def find_plate_approx(self, approxes: np.ndarray) -> list:
