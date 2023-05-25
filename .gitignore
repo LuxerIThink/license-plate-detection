@@ -1,1 +1,6 @@
 /venv
+/processing/test_solution.txt
+/processing/train_solution.txt
+test_output.txt
+train_output.txt
+```
