@@ -10,7 +10,7 @@ class CharsGatherer:
         self.filter_di: int = 15
         self.filter_sig_color: int = 25
         self.filter_sig_space: int = 50
-        self.gaussian_blur: tuple[int, int] = (7, 5)
+        self.gaussian_blur: tuple[int, int] = (5, 5)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         self.threshold1 = 100
         self.threshold2 = 200
@@ -29,7 +29,7 @@ class CharsGatherer:
         # features approx dp
         self.fix_mistakes_table: dict = {
             "Z": ("7", 1.4),
-            "C": ("G", 1.2),
+            "C": ("G", 1.1),
             "S": ("5", 1.5),
             "J": ("4", 1.2),
             "Y": ("1", 1.3),
@@ -38,6 +38,7 @@ class CharsGatherer:
             "0": ("G", 1.1),
             "R": ("W", 1.1),
             "O": ("0", 1.0083),
+            "N": ("W", 1.1),
         }
 
         self.chars_generator = CharsImgGenerator()
