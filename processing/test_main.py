@@ -24,8 +24,6 @@ def calculate_correct_chars(expected_output, actual_output):
         for expected_char, actual_char in zip(expected_value, actual_value):
             if expected_char == actual_char:
                 correct_chars += 1
-            else:
-                print(expected_char)
             total_chars += 1
 
     percentage_correct = (correct_chars / total_chars) * 100
@@ -34,9 +32,9 @@ def calculate_correct_chars(expected_output, actual_output):
 
 def test_main(run_main):
     file_path = Path(__file__).resolve().parent
-    img_path = file_path.parent / "train_data"
-    output_file = file_path.parent / "train_output.txt"
-    solution_file = file_path / "train_solution.txt"
+    img_path = file_path.parent / "test_data"
+    output_file = file_path.parent / "test_output.txt"
+    solution_file = file_path / "test_solution.txt"
     main_path = file_path.parent / "Pawlowski_Adam.py"
 
     with open(solution_file, "r") as f:
