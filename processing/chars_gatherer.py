@@ -122,7 +122,7 @@ class CharsGatherer:
         return rect_with_margin
 
     def is_rect_inside(self, inner_rect: list, outer_rect: list) -> bool:
-        inner_rect = self.add_margin_to_rect(inner_rect, 0.2)
+        inner_rect = self.add_margin_to_rect(inner_rect, 0.4)
         if (
                 inner_rect[0] <= outer_rect[0]
                 and inner_rect[1] <= outer_rect[1]
