@@ -33,28 +33,27 @@ def calculate_correct_chars(expected_output, actual_output):
 def test_main(run_main):
     file_path = Path(__file__).resolve().parent
     img_path = file_path.parent / "test_data"
-    output_file = file_path.parent / "test_output.txt"
+    output_file = file_path.parent / "output.txt"
     solution_file = file_path / "test_solution.txt"
     main_path = file_path.parent / "Pawlowski_Adam.py"
+
+    start_time = time.time()
+
+    _ = run_main(main_path, img_path, output_file)
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
 
     with open(solution_file, "r") as f:
         expected_output = json.load(f)
 
-    start_time = time.time()  # Start time measurement
-
-    # Run main with the arguments
-    _ = run_main(main_path, img_path, output_file)
-
-    end_time = time.time()  # End time measurement
-    elapsed_time = end_time - start_time
-
     with open(output_file, "r") as f:
         actual_output = json.load(f)
 
-    # Calculate percentage of correct characters in the values
     percentage_correct = calculate_correct_chars(expected_output, actual_output)
 
-    print("\nElapsed Time:", elapsed_time, "seconds")
+    print("\n")
+    print("Elapsed Time:", elapsed_time, "seconds")
     print("Percentage of Correct Characters:", percentage_correct)
 
     assert percentage_correct >= 80
