@@ -16,7 +16,6 @@ class LicensePlateGatherer:
         self.gaussian_blur: tuple[int, int] = (7, 5)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
-
         # plate requirements
         self.second_plate_ratio: float = 0.6
         self.min_plate_ratio: float = 2
