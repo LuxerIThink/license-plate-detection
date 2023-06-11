@@ -3,6 +3,7 @@ import numpy as np
 
 from .chars_img_generator import CharsImgGenerator
 
+
 class CharsGatherer:
     def __init__(self, plate_height):
 
@@ -46,7 +47,8 @@ class CharsGatherer:
 
     def get_str(self, plate_img: np.ndarray):
         plate_img = self.filter_img(plate_img)
-        contours = self.find_edges(plate_img)
+        edges = self.find_edges(plate_img)
+        contours = self.find_contours(edges)
         chars_contours = self.find_chars_contours(contours)
         chars_images = self.crop_images(plate_img, chars_contours)
         string = self.get_string(chars_images)
@@ -57,9 +59,13 @@ class CharsGatherer:
         img = cv2.GaussianBlur(img, self.gaussian_blur, 0)
         return img
 
-    def find_edges(self, img: np.ndarray) -> list:
+    def find_edges(self, img: np.ndarray) -> np.ndarray:
         edges = cv2.Canny(img, self.threshold1, self.threshold2)
         edges = self.edit_edges(edges)
+        return edges
+
+    @staticmethod
+    def find_contours(edges):
         contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         contours = sorted(contours, key=cv2.contourArea, reverse=True)
         return contours
@@ -81,19 +87,6 @@ class CharsGatherer:
         approxes = self.remove_approx_duplicates(approxes)
         return approxes
 
-    def is_valid_contour(self, contour: np.ndarray) -> np.ndarray | None:
-        approx, char_to_plate, ratio = self.get_contours_features(contour)
-        if self.min_ratio < ratio < self.max_ratio and char_to_plate > self.char_to_plate and len(approx) > 5:
-            return approx
-        return None
-
-    def get_contours_features(self, contour: np.ndarray) -> tuple[np.ndarray, float, float]:
-        x, y, width, height = cv2.boundingRect(contour)
-        ratio = float(width) / height
-        char_to_plate = float(height) / self.plate_height
-        approx = cv2.approxPolyDP(contour, self.approx_poly_dp * cv2.arcLength(contour, True), True)
-        return approx, char_to_plate, ratio
-
     def remove_approx_duplicates(self, approxs: list) -> list:
         new_approxes = []
         previous_approx = None
@@ -110,14 +103,33 @@ class CharsGatherer:
             return True
         return False
 
+    def crop_images(self, img: np.ndarray, approx: list) -> list[np.ndarray]:
+        chars_imgs = []
+        for approx in approx:
+            chars_imgs.append(self.crop_image(img, approx))
+        return chars_imgs
+
+    def is_valid_contour(self, contour: np.ndarray) -> np.ndarray | None:
+        approx, char_to_plate, ratio = self.get_contours_features(contour)
+        if self.min_ratio < ratio < self.max_ratio and char_to_plate > self.char_to_plate and len(approx) > 5:
+            return approx
+        return None
+
+    def get_contours_features(self, contour: np.ndarray) -> tuple[np.ndarray, float, float]:
+        x, y, width, height = cv2.boundingRect(contour)
+        ratio = float(width) / height
+        char_to_plate = float(height) / self.plate_height
+        approx = cv2.approxPolyDP(contour, self.approx_poly_dp * cv2.arcLength(contour, True), True)
+        return approx, char_to_plate, ratio
+
     @staticmethod
     def add_margin_to_rect(rect: list, margin_percentage: float) -> list:
-        margin = rect[2] * margin_percentage  # Calculate margin based on width
+        margin = rect[2] * margin_percentage
         rect_with_margin = [
-            rect[0] - margin,  # Left side with margin
-            rect[1] - margin,  # Top side with margin
-            rect[2] + 2 * margin,  # Increased width by margin on both sides
-            rect[3] + 2 * margin,  # Increased height by margin on both sides
+            rect[0] - margin,  # Left margin
+            rect[1] - margin,  # Top margin
+            rect[2] + 2 * margin,  # Increased width on both sides
+            rect[3] + 2 * margin,  # Increased height on both sides
         ]
         return rect_with_margin
 
@@ -132,12 +144,6 @@ class CharsGatherer:
             return True
         return False
 
-    def crop_images(self, img: np.ndarray, approx: list) -> list[np.ndarray]:
-        chars_imgs = []
-        for approx in approx:
-            chars_imgs.append(self.crop_image(img, approx))
-        return chars_imgs
-
     @staticmethod
     def crop_image(img: np.ndarray, contour: list) -> np.ndarray:
         cropped_image = img.copy()
@@ -146,9 +152,9 @@ class CharsGatherer:
         _, treshold_image = cv2.threshold(cropped_image, 128, 255, cv2.THRESH_BINARY)
         return cropped_image
 
-    def get_string(self, chars_imgs: list[np.ndarray]) -> str:
+    def get_string(self, imgs: list[np.ndarray]) -> str:
         string = ''
-        for img in chars_imgs:
+        for img in imgs:
             char = self.get_char(img)
             string += char
         return string
@@ -159,8 +165,7 @@ class CharsGatherer:
         match_percentages = {}
 
         for char_str, char_img in self.template_chars:
-            template_height, template_width, _ = char_img.shape
-            img_resized = self.resize_image(img, template_width, template_height)
+            img_resized = self.resize_image(char_img, img)
             match_prob = self.compare_images(img_resized, char_img)
             match_percentages[char_str] = match_prob
 
@@ -168,17 +173,24 @@ class CharsGatherer:
                 char = char_str
                 best_match_prob = match_prob
 
+        char = self.fix_detected_mistakes(best_match_prob, char, match_percentages)
+
+        return char
+
+    def fix_detected_mistakes(self, best_match_prob, char, match_percentages):
         if char in self.fix_mistakes_table:
             skip_match, threshold = self.fix_mistakes_table[char]
             if (match_percentages[skip_match] / best_match_prob) < threshold:
                 char = skip_match
-
         return char
 
-    def resize_image(self, img: np.ndarray, width: int, height: int) -> np.ndarray:
+    @staticmethod
+    def resize_image(template_img: np.ndarray, img: np.ndarray) -> np.ndarray:
+        height, width, _ = template_img.shape
         return cv2.resize(img, (width, height))
 
-    def compare_images(self, img1: np.ndarray, img2: np.ndarray) -> str:
+    @staticmethod
+    def compare_images(img1: np.ndarray, img2: np.ndarray) -> int:
         result = cv2.matchTemplate(img1, img2, cv2.TM_SQDIFF_NORMED)
         _, match_prob, _, _ = cv2.minMaxLoc(result)
         return match_prob
