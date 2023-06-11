@@ -6,23 +6,23 @@ from .chars_gatherer import CharsGatherer
 
 class LicensePlateGatherer:
     def __init__(self):
-        # image max size
+        # Image max size
         self.target_width: int = 960
 
-        # img filtering
+        # Img filtering
         self.filter_di: int = 15
         self.filter_sig_color: int = 25
         self.filter_sig_space: int = 50
         self.gaussian_blur: tuple[int, int] = (7, 5)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
 
-        # plate requirements
+        # Plate requirements
         self.second_plate_ratio: float = 0.6
         self.min_plate_ratio: float = 2
         self.max_plate_ratio: float = 6
         self.approx_poly_dp: float = 0.015
 
-        # plate settings
+        # Plate settings
         self.plate_width: float = 1000
         self.plate_height: float = 200
 
@@ -30,15 +30,14 @@ class LicensePlateGatherer:
 
     def perform_processing(self, img: np.ndarray) -> str:
         scaled_img = self.resize_img(img)
-        gray_img = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
-        filtered_img = self.img_filtering(gray_img)
+        filtered_img = self.img_filtering(scaled_img)
         img_contours = self.find_contours(filtered_img)
         if img_contours is None:
             return ""
         plate_contour = self.find_plate_approx(img_contours)
         if plate_contour is None:
             return ""
-        plate_img = self.cut_plate_img(scaled_img, plate_contour)
+        plate_img = self.crop_plate_img(scaled_img, plate_contour)
         string = self.chars_gatherer.get_str(plate_img)
         return string
 
@@ -51,6 +50,7 @@ class LicensePlateGatherer:
         return img
 
     def img_filtering(self, img: np.ndarray) -> np.ndarray:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         img = cv2.bilateralFilter(
             img, self.filter_di, self.filter_sig_color, self.filter_sig_space
         )
@@ -94,47 +94,31 @@ class LicensePlateGatherer:
         ratio = max(side_lengths) / min(side_lengths)
         return self.min_plate_ratio < ratio < self.max_plate_ratio
 
-    def choose_plate(
-        self, contours: list[np.ndarray]
-    ) -> list[np.ndarray] | None:
+    def choose_plate(self, contours: list[np.ndarray]) -> list[np.ndarray] | None:
         contours.sort(key=cv2.contourArea, reverse=True)
         if contours:
             if len(contours) >= 2:
-                if cv2.contourArea(
-                    contours[1]
-                ) > self.second_plate_ratio * cv2.contourArea(contours[0]):
+                if cv2.contourArea(contours[1]) > self.second_plate_ratio * cv2.contourArea(contours[0]):
                     return [contours[1]]
             return [contours[0]]
         return None
 
-    def cut_plate_img(self, img: np.ndarray, approx: list) -> np.ndarray:
+    def crop_plate_img(self, img: np.ndarray, approx: list) -> np.ndarray:
         new_polygon = np.array(self.sort_points_clockwise(approx[0]), dtype=np.float32)
-        transformation_matrix = cv2.getPerspectiveTransform(
-            new_polygon, self.get_target_rect()
-        )
-        transformed_image = cv2.warpPerspective(
-            img, transformation_matrix, (self.plate_width, self.plate_height)
-        )
+        transformation_matrix = cv2.getPerspectiveTransform(new_polygon, self.get_target_rect())
+        transformed_image = cv2.warpPerspective(img, transformation_matrix, (self.plate_width, self.plate_height))
         return transformed_image
 
     @staticmethod
     def sort_points_clockwise(points: list) -> list:
         sorted_by_y = sorted(points, key=lambda point: point[0][1])
         top_order = sorted(sorted_by_y[:2], key=lambda point: point[0][0])
-        bottom_order = sorted(
-            sorted_by_y[2:], key=lambda point: point[0][0], reverse=True
-        )
+        bottom_order = sorted(sorted_by_y[2:], key=lambda point: point[0][0], reverse=True)
         sorted_points = top_order + bottom_order
         return sorted_points
 
     def get_target_rect(self) -> np.ndarray:
-        target_rect = np.array(
-            [
-                [0, 0],
-                [self.plate_width, 0],
-                [self.plate_width, self.plate_height],
-                [0, self.plate_height],
-            ],
-            dtype=np.float32,
-        )
-        return target_rect
+        return np.array([[0, 0],
+                         [self.plate_width, 0],
+                         [self.plate_width, self.plate_height],
+                         [0, self.plate_height]], dtype=np.float32,)
